@@ -2,6 +2,7 @@ import bpy
 from bpy.props import IntProperty, StringProperty, BoolProperty, FloatProperty, EnumProperty
 
 import os
+import sys
 import subprocess
 from time import gmtime, strftime, sleep
 from tempfile import gettempdir

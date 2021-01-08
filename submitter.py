@@ -147,7 +147,7 @@ class TrHttpRPC(object):
                 outdata = "no data received"
                 errcode = -1
 
-        except Exception, e:
+        except Exception as e:
             if e[0] in (errno.ECONNREFUSED, errno.WSAECONNREFUSED):
                 outdata = "connection refused"
                 errcode = e[0]
@@ -308,8 +308,7 @@ def Spool (argv):
             return 1
 
         if options.loglevel > 1:
-            print "%s\nCopyright (c) 2007-%d Pixar. All rights reserved." \
-            % (appBuild, datetime.datetime.now().year)
+            print("{} {} Copyright (c) 2007-%d Pixar. All rights reserved.".format(appBuild, datetime.datetime.now().year))
 
         if options.mtdhost != defaultMtd:
             h,n,p = options.mtdhost.partition(":")
@@ -346,7 +345,7 @@ def Spool (argv):
     except KeyboardInterrupt:
         xcpt = "received keyboard interrupt"
 
-    except SystemExit, e:
+    except SystemExit as e:
         rc = e
 
     except:
@@ -355,9 +354,9 @@ def Spool (argv):
         rc = 1
 
     if xcpt:
-        print >>sys.stderr,xcpt
+        print(sys.stderr,xcpt)
 
-    print "SPOOLED!!"
+    print("SPOOLED!!")
     return rc
 
 ## ------------------------------------------------------------- ##

@@ -21,7 +21,7 @@ import shutil
 import math
 
 from functools import reduce
-import numpy as np
+#import numpy as np
 
 
 #http class 
@@ -66,11 +66,11 @@ class TrHttpRPC(object):
             t = "/Tractor/{}".format(tractorverb)
 
             # we use POST when making changes to the destination (REST)
-            req = "POST " + t + " HTTP/1.0\r\n"
+            req = "POST {} HTTP/1.0\r\n".format(t)
             for h in self.appheaders:
-                req += h + ": " + self.appheaders[h] + "\r\n"
+                req = "{} : {} \r\n".format(h,self.appheaders[h])
             for h in xheaders:
-                req += h + ": " + xheaders[h] + "\r\n"
+                req = "{}: {} \r\n".format(h,xheaders[h])
 
             if formdata:
                 t = formdata.strip()
@@ -78,10 +78,13 @@ class TrHttpRPC(object):
                 #req += "Content-Length: %d\r\n" % len(t)
                 #req += "\r\n"  # end of http headers
                 #req += t
-                req = "Content-Type: application/x-www-form-urlencoded.Content-Length:{}.{}".format(len(t),t)
+                req = "{}Content-Type: application/x-www-form-urlencoded \r\n".format(req) 
+                req = "{}Content-Length:{}".format(req,len(t))
+                req = "{}\r\n".format(req)
+                req = "{}{}".format(req,t)
                         
             else:
-                req += "\r\n"  # end of http headers
+                req = "{}\r\n".format(req)  # end of http headers
 
             # error checking?  why be a pessimist?
             # that's why we have exceptions
@@ -105,7 +108,7 @@ class TrHttpRPC(object):
                 if not r:
                     break
                 else:
-                    t += r
+                    t = "{}{}".format(t,r)
 
             # Attempt to reduce descriptors held in TIME_WAIT on the
             # engine by dismantling this request socket immediately
@@ -141,9 +144,8 @@ class TrHttpRPC(object):
 
                         except Exception:
                             errcode = -1
-                            self.Debug("json parse:\n" + outdata)
-                            outdata = "parse %s: %s" % \
-                            (parseCtxName, self.Xmsg())
+                            self.Debug("json parse:\n {}".format(outdata))
+                            outdata = "parse {}: {}".format(parseCtxName, self.Xmsg())
 
                 if analyzer:
                     analyzer( h )
@@ -164,7 +166,7 @@ class TrHttpRPC(object):
                 errcode = e[0]
             else:
                 errcode = -1
-                outdata = "http transaction: " + self.Xmsg()
+                outdata = "http transaction: {} ".format(self.Xmsg())
 
         return (errcode, outdata)
 
@@ -200,7 +202,7 @@ class TrHttpRPC(object):
             return self.logger.Xcpt()
         else:
             errclass, excobj = sys.exc_info()[:2]
-            return "%s - %s" % (errclass.__name__, str(excobj))
+            return "{} - {}".format(errclass.__name__, str(excobj))
 
 ## --------------------------------------------------- ##
 

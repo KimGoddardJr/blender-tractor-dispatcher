@@ -20,6 +20,9 @@ import re
 import shutil
 import math
 
+from functools import reduce
+import numpy as np
+
 
 #http class 
 ## ------------------------------------------------------------- ##
@@ -60,7 +63,7 @@ class TrHttpRPC(object):
 
         try:
             # like:  http://tractor-engine:80/Tractor/task?q=nextcmd&...
-            t = "/Tractor/" + tractorverb
+            t = "/Tractor/{}".format(tractorverb)
 
             # we use POST when making changes to the destination (REST)
             req = "POST " + t + " HTTP/1.0\r\n"
@@ -71,10 +74,12 @@ class TrHttpRPC(object):
 
             if formdata:
                 t = formdata.strip()
-                req += "Content-Type: application/x-www-form-urlencoded\r\n"
-                req += "Content-Length: %d\r\n" % len(t)
-                req += "\r\n"  # end of http headers
-                req += t
+                #req += "Content-Type: application/x-www-form-urlencoded\r\n"
+                #req += "Content-Length: %d\r\n" % len(t)
+                #req += "\r\n"  # end of http headers
+                #req += t
+                req = "Content-Type: application/x-www-form-urlencoded.Content-Length:{}.{}".format(len(t),t)
+                        
             else:
                 req += "\r\n"  # end of http headers
 
@@ -147,10 +152,13 @@ class TrHttpRPC(object):
                 outdata = "no data received"
                 errcode = -1
 
+            print("This is e: ",e)
+
         except Exception as e:
+            print("This is Exception as e: ",e)
             if e[0] in (errno.ECONNREFUSED, errno.WSAECONNREFUSED):
                 outdata = "connection refused"
-                errcode = e[0]
+                errcode = e
             elif e[0] in (errno.ECONNRESET, errno.WSAECONNRESET):
                 outdata = "connection dropped"
                 errcode = e[0]
@@ -200,6 +208,7 @@ def Spool (argv):
     '''
     tractor-spool - main - examine options, connect to engine, transfer job
     '''
+
     appName =        "tractor-spool"
     appVersion =     "TRACTOR_VERSION"
     appProductDate = "TRACTOR_BUILD_DATE"
@@ -293,65 +302,65 @@ def Spool (argv):
     rc = 0
     xcpt = None
 
-    try:
-        options, jobfiles = optparser.parse_args( argv )
+#    try:
+    options, jobfiles = optparser.parse_args( argv )
 
-        if options.jdel_id:
-            if len(jobfiles) > 0:
-                optparser.error("too many arguments for jdelete")
-                return 1
-            else:
-                return jobDelete(options)
-
-        if 0 == len(jobfiles):
-            optparser.error("no job script specified")
+    if options.jdel_id:
+        if len(jobfiles) > 0:
+            optparser.error("too many arguments for jdelete")
             return 1
-
-        if options.loglevel > 1:
-            print("{} {} Copyright (c) 2007-%d Pixar. All rights reserved.".format(appBuild, datetime.datetime.now().year))
-
-        if options.mtdhost != defaultMtd:
-            h,n,p = options.mtdhost.partition(":")
-            if not p:
-                options.mtdhost = h + ':80'
-
-        # paused starting is represented by a negative priority
-        # decremented by one. This allows a zero priority to pause
-        if options.paused:
-            try:
-                options.priority = str( -float( options.priority ) -1 )
-            except Exception:
-                options.priority = "-2"
-
-        # apply --rib handler by default if all files end in ".rib"
-        if not options.ribspool and \
-        reduce(lambda x, y: x and y,
-                    [f.endswith('.rib') for f in jobfiles]):
-            options.ribspool = 'rcmds'
-
-        #
-        # now spool new jobs
-        #
-        if options.ribspool:
-            rc = createRibRenderJob(jobfiles, options)
-            if rc == 0:
-                rc, xcpt = jobSpool(jobfiles[0], options)
         else:
-            for filename in jobfiles:
-                rc, xcpt = jobSpool(filename, options)
-                if rc:
-                    break
+            return jobDelete(options)
 
-    except KeyboardInterrupt:
-        xcpt = "received keyboard interrupt"
+    if 0 == len(jobfiles):
+        optparser.error("no job script specified")
+        return 1
 
-    except SystemExit as e:
-        rc = e
+    if options.loglevel > 1:
+        print("{} {} Copyright (c) 2007-%d Pixar. All rights reserved.".format(appBuild, datetime.datetime.now().year))
 
-    except:
-        errclass, excobj = sys.exc_info()[:2]
-        xcpt = "job spool: %s - %s" % (errclass.__name__, str(excobj))
-        rc = 1
+    if options.mtdhost != defaultMtd:
+        h,n,p = options.mtdhost.partition(":")
+        if not p:
+            options.mtdhost = h + ':80'
+
+    # paused starting is represented by a negative priority
+    # decremented by one. This allows a zero priority to pause
+    if options.paused:
+        try:
+            options.priority = str( -float( options.priority ) -1 )
+        except Exception:
+            options.priority = "-2"
+
+    # apply --rib handler by default if all files end in ".rib"
+    if not options.ribspool and \
+    reduce(lambda x, y: x and y,
+                [f.endswith('.rib') for f in jobfiles]):
+        options.ribspool = 'rcmds'
+
+    #
+    # now spool new jobs
+    #
+    if options.ribspool:
+        rc = createRibRenderJob(jobfiles, options)
+        if rc == 0:
+            rc, xcpt = jobSpool(jobfiles[0], options)
+    else:
+        for filename in jobfiles:
+            rc, xcpt = jobSpool(filename, options)
+            if rc:
+                break
+
+#    except KeyboardInterrupt:
+#        xcpt = "received keyboard interrupt"
+#
+#    except SystemExit as e:
+#        rc = e
+#
+#    except:
+#        errclass, excobj = sys.exc_info()[:2]
+#        xcpt = "job spool: %s - %s" % (errclass.__name__, str(excobj))
+#        rc = 1
 
     if xcpt:
         print(sys.stderr,xcpt)

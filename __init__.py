@@ -40,10 +40,10 @@ bl_info = {
     "category": "Render"}
 
 
-if "bpy" in locals():
-	import importlib
-	if "tractor_render_dispatcher" in locals():
-		importlib.reload(tractor_render_dispatcher)
+#if "bpy" in locals():
+#	import importlib
+#	if "tractor_render_dispatcher" in locals():
+#		importlib.reload(tractor_render_dispatcher)
 
 
 import bpy

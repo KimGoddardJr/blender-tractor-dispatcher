@@ -1,4 +1,5 @@
 import bpy
+#import six
 import json
 import pprint
 import string
@@ -74,6 +75,7 @@ class TrHttpRPC(object):
 
             if formdata:
                 t = formdata.strip()
+                print("This is t inside req1 if formdata: {}".format(t))
                 #req += "Content-Type: application/x-www-form-urlencoded\r\n"
                 #req += "Content-Length: %d\r\n" % len(t)
                 #req += "\r\n"  # end of http headers
@@ -81,22 +83,29 @@ class TrHttpRPC(object):
                 req = "{}Content-Type: application/x-www-form-urlencoded \r\n".format(req) 
                 req = "{}Content-Length:{}".format(req,len(t))
                 req = "{}\r\n".format(req)
-                req = "{}{}".format(req,t)
+                #convert to byte? python3
+                req = "{} {}".format(req,t)
+                req = b"%b" % (bytes(req, encoding="ascii"))
+                #print("This is req: {}".format(req))
                         
             else:
                 req = "{}\r\n".format(req)  # end of http headers
-
+                req = b"%b" % (bytes(req, encoding="ascii"))
             # error checking?  why be a pessimist?
             # that's why we have exceptions
 
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect( (self.host, self.port) )
-            s.sendall(req)
+            #socket starts a program 
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                #s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                #s.setblocking(0)
+                s.connect( (self.host, self.port) )
+                #encoding the string before sending changes the string
+                s.sendall(req)
 
             mustTimeWait = False
 
             t = ""  # build up the reply text
-            while 1:
+            while True:
                 r,w,x = select.select([s], [], [], 30.0)
                 if r:
                     if 0 == len(r):
@@ -119,17 +128,20 @@ class TrHttpRPC(object):
             # linger-on-close() but setting the timeout to zero seconds.
             #
             if not mustTimeWait:
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
-                                 struct.pack('ii', 1, 0))
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack('ii', 1, 0))
+            
             s.close()
 
+            print("This is t before weird if statement: {}".format(t))
             if t and len(t):
                 n = t.find("\r\n\r\n")
+                
                 h = t[0:n] # headers
-
-                n += 4
+                
+                n = "{}{}".format(n,4)
+                
                 outdata = t[n:].strip()  # body, or error msg, no CRLF
-
+                
                 n = h.find(' ') + 1
                 e = h.find(' ', n)
                 errcode = int( h[n:e] )
@@ -154,19 +166,21 @@ class TrHttpRPC(object):
                 outdata = "no data received"
                 errcode = -1
 
-            print("This is e: ",e)
+
 
         except Exception as e:
-            print("This is Exception as e: ",e)
-            if e[0] in (errno.ECONNREFUSED, errno.WSAECONNREFUSED):
+            print("This is Exception as e: {}".format(e.args[0]))
+            
+            if e.args[0] in (errno.ECONNREFUSED, errno.WSAECONNREFUSED):
                 outdata = "connection refused"
-                errcode = e
-            elif e[0] in (errno.ECONNRESET, errno.WSAECONNRESET):
+                errcode = e.args[0]
+            elif e.args[0] in (errno.ECONNRESET, errno.WSAECONNRESET):
                 outdata = "connection dropped"
-                errcode = e[0]
+                errcode = e.args[0]
             else:
                 errcode = -1
                 outdata = "http transaction: {} ".format(self.Xmsg())
+            
 
         return (errcode, outdata)
 
@@ -223,7 +237,7 @@ def Spool (argv):
 
     # ------ #
     TrFileRevisionDate = "$DateTime: 2009/04/23 17:17:43 $"
-    if not appProductDate[0].isdigit():
+    if not appProductDate.isdigit():
         appProductDate = " ".join(TrFileRevisionDate.split()[1:3])
         appVersion = "dev"
 
@@ -304,65 +318,66 @@ def Spool (argv):
     rc = 0
     xcpt = None
 
-#    try:
-    options, jobfiles = optparser.parse_args( argv )
+    try:
+        options, jobfiles = optparser.parse_args( argv )
 
-    if options.jdel_id:
-        if len(jobfiles) > 0:
-            optparser.error("too many arguments for jdelete")
+        if options.jdel_id:
+            if len(jobfiles) > 0:
+                optparser.error("too many arguments for jdelete")
+                return 1
+            else:
+                return jobDelete(options)
+
+        if 0 == len(jobfiles):
+            optparser.error("no job script specified")
             return 1
+
+        if options.loglevel > 1:
+            print("{} {} Copyright (c) 2007-%d Pixar. All rights reserved.".format(appBuild, datetime.datetime.now().year))
+
+        if options.mtdhost != defaultMtd:
+            h,n,p = options.mtdhost.partition(":")
+            if not p:
+                options.mtdhost = h + ':80'
+
+        # paused starting is represented by a negative priority
+        # decremented by one. This allows a zero priority to pause
+        if options.paused:
+            try:
+                options.priority = str( -float( options.priority ) -1 )
+            except Exception:
+                options.priority = "-2"
+
+        # apply --rib handler by default if all files end in ".rib"
+        if not options.ribspool and \
+        reduce(lambda x, y: x and y,
+                    [f.endswith('.rib') for f in jobfiles]):
+            options.ribspool = 'rcmds'
+
+        #
+        # now spool new jobs
+        #
+        if options.ribspool:
+            rc = createRibRenderJob(jobfiles, options)
+            if rc == 0:
+                rc, xcpt = jobSpool(jobfiles[0], options)
         else:
-            return jobDelete(options)
+            for filename in jobfiles:
+                rc, xcpt = jobSpool(filename, options)
+                if rc:
+                    break
+    
+    
+    except KeyboardInterrupt:
+        xcpt = "received keyboard interrupt"
 
-    if 0 == len(jobfiles):
-        optparser.error("no job script specified")
-        return 1
+    except SystemExit as e:
+        rc = e
 
-    if options.loglevel > 1:
-        print("{} {} Copyright (c) 2007-%d Pixar. All rights reserved.".format(appBuild, datetime.datetime.now().year))
-
-    if options.mtdhost != defaultMtd:
-        h,n,p = options.mtdhost.partition(":")
-        if not p:
-            options.mtdhost = h + ':80'
-
-    # paused starting is represented by a negative priority
-    # decremented by one. This allows a zero priority to pause
-    if options.paused:
-        try:
-            options.priority = str( -float( options.priority ) -1 )
-        except Exception:
-            options.priority = "-2"
-
-    # apply --rib handler by default if all files end in ".rib"
-    if not options.ribspool and \
-    reduce(lambda x, y: x and y,
-                [f.endswith('.rib') for f in jobfiles]):
-        options.ribspool = 'rcmds'
-
-    #
-    # now spool new jobs
-    #
-    if options.ribspool:
-        rc = createRibRenderJob(jobfiles, options)
-        if rc == 0:
-            rc, xcpt = jobSpool(jobfiles[0], options)
-    else:
-        for filename in jobfiles:
-            rc, xcpt = jobSpool(filename, options)
-            if rc:
-                break
-
-#    except KeyboardInterrupt:
-#        xcpt = "received keyboard interrupt"
-#
-#    except SystemExit as e:
-#        rc = e
-#
-#    except:
-#        errclass, excobj = sys.exc_info()[:2]
-#        xcpt = "job spool: %s - %s" % (errclass.__name__, str(excobj))
-#        rc = 1
+    except:
+        errclass, excobj = sys.exc_info()[:2]
+        xcpt = "job spool: {} - {}".format(errclass.__name__, str(excobj))
+        rc = 1
 
     if xcpt:
         print(sys.stderr,xcpt)
@@ -392,7 +407,7 @@ def jobSpool (jobfile, options):
         alfdata = options.ribjobtxt
     else:
         # usual case, read the alfred jobfile
-        f = open(jobfile, "rb")
+        f = open(jobfile, "r")
         alfdata = f.read()
         f.close()
 
